@@ -16,17 +16,21 @@ python3 -m http.server 8000
 Edit `flights.js`:
 
 - Add an airport to `AIRPORTS` if it isn't already there (use the IATA code as the key).
-- Add a trip to `TRIPS`. Each trip is just the sequence of airports flown.
+- Add a trip to `TRIPS`. Each trip has one or more `legs`; a leg is a chain
+  of airports flown without a non-flight break.
 
 ```js
 // Round trip, nonstop
-{ segments: ["JFK", "LAX", "JFK"], label: "LA trip" }
+{ legs: [["JFK", "LAX", "JFK"]], label: "LA trip" }
 
 // One-way with a layover
-{ segments: ["BOS", "ORD", "SEA"], label: "Seattle move" }
+{ legs: [["BOS", "ORD", "SEA"]], label: "Seattle move" }
 
 // Round trip with different connections each way
-{ segments: ["LGA", "DCA", "GSP", "CLT", "LGA"], label: "DCA out, CLT back" }
+{ legs: [["LGA", "DCA", "GSP", "CLT", "LGA"]], label: "DCA out, CLT back" }
+
+// Open-jaw: fly into Paris, train to Amsterdam, fly home from Amsterdam
+{ legs: [["GSP", "IAD", "CDG"], ["AMS", "IAD", "GSP"]], label: "Europe" }
 ```
 
 ## Stack

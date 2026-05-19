@@ -66,46 +66,49 @@ function edgeKey(a, b) {
 
 TRIPS.forEach((trip) => {
   let tripMiles = 0;
-  const tripSegments = trip.segments.length - 1;
+  let tripSegments = 0;
   const drawnEdgesThisTrip = new Set();
 
-  for (let i = 0; i < trip.segments.length - 1; i++) {
-    const fromCode = trip.segments[i];
-    const toCode = trip.segments[i + 1];
-    const from = AIRPORTS[fromCode];
-    const to = AIRPORTS[toCode];
-    if (!from || !to) {
-      console.warn(`Missing airport for ${fromCode} -> ${toCode}`);
-      continue;
+  trip.legs.forEach((leg) => {
+    for (let i = 0; i < leg.length - 1; i++) {
+      const fromCode = leg[i];
+      const toCode = leg[i + 1];
+      const from = AIRPORTS[fromCode];
+      const to = AIRPORTS[toCode];
+      if (!from || !to) {
+        console.warn(`Missing airport for ${fromCode} -> ${toCode}`);
+        continue;
+      }
+
+      const miles = haversineMiles(from, to);
+      tripMiles += miles;
+      tripSegments += 1;
+      totalMiles += miles;
+      totalSegments += 1;
+      visitedAirports.add(fromCode);
+      visitedAirports.add(toCode);
+
+      const key = edgeKey(fromCode, toCode);
+      edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
+
+      // Draw each unique edge once per trip so overlapping legs of the same
+      // trip (e.g. outbound + return through same hub) don't pile up identical lines.
+      if (!drawnEdgesThisTrip.has(key)) {
+        drawnEdgesThisTrip.add(key);
+        const path = greatCirclePoints(from, to);
+        L.polyline(path, {
+          color: "#38bdf8",
+          weight: 2,
+          opacity: 0.7,
+        }).addTo(map).bindTooltip(
+          `${fromCode} &harr; ${toCode}<br>${Math.round(miles).toLocaleString()} mi`
+        );
+        allLatLngs.push(...path);
+      }
     }
+  });
 
-    const miles = haversineMiles(from, to);
-    tripMiles += miles;
-    totalMiles += miles;
-    totalSegments += 1;
-    visitedAirports.add(fromCode);
-    visitedAirports.add(toCode);
-
-    const key = edgeKey(fromCode, toCode);
-    edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
-
-    // Draw each unique edge once per trip so overlapping legs of the same
-    // trip (e.g. outbound + return through same hub) don't pile up identical lines.
-    if (!drawnEdgesThisTrip.has(key)) {
-      drawnEdgesThisTrip.add(key);
-      const path = greatCirclePoints(from, to);
-      L.polyline(path, {
-        color: "#38bdf8",
-        weight: 2,
-        opacity: 0.7,
-      }).addTo(map).bindTooltip(
-        `${fromCode} &harr; ${toCode}<br>${Math.round(miles).toLocaleString()} mi`
-      );
-      allLatLngs.push(...path);
-    }
-  }
-
-  const routeText = trip.segments.join(" → ");
+  const routeText = trip.legs.map((leg) => leg.join(" → ")).join("   …   ");
   const li = document.createElement("li");
   li.innerHTML = `
     <div class="route">${trip.label}</div>
