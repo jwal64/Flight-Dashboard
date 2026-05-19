@@ -16,10 +16,17 @@ python3 -m http.server 8000
 Edit `flights.js`:
 
 - Add an airport to `AIRPORTS` if it isn't already there (use the IATA code as the key).
-- Add a trip to `FLIGHTS`. Set `roundTrip: true` to count both legs.
+- Add a trip to `TRIPS`. Each trip is just the sequence of airports flown.
 
 ```js
-FLIGHTS.push({ from: "JFK", to: "LAX", roundTrip: false });
+// Round trip, nonstop
+{ segments: ["JFK", "LAX", "JFK"], label: "LA trip" }
+
+// One-way with a layover
+{ segments: ["BOS", "ORD", "SEA"], label: "Seattle move" }
+
+// Round trip with different connections each way
+{ segments: ["LGA", "DCA", "GSP", "CLT", "LGA"], label: "DCA out, CLT back" }
 ```
 
 ## Stack
