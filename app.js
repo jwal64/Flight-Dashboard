@@ -36,7 +36,7 @@ function greatCirclePoints(a, b, steps = 64) {
   return points;
 }
 
-const map = L.map("map", { worldCopyJump: true }).setView([30, -70], 4);
+const map = L.map("map", { worldCopyJump: true }).setView([30, -30], 3);
 
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -44,19 +44,25 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
   maxZoom: 19,
 }).addTo(map);
 
-const airportIcon = L.divIcon({
-  className: "airport-marker",
-  html: '<div style="width:10px;height:10px;background:#38bdf8;border:2px solid #0f172a;border-radius:50%;box-shadow:0 0 6px #38bdf8;"></div>',
-  iconSize: [14, 14],
-  iconAnchor: [7, 7],
-});
+function airportMarkerIcon(color) {
+  return L.divIcon({
+    className: "airport-marker",
+    html: `<div style="width:10px;height:10px;background:${color};border:2px solid #0f172a;border-radius:50%;box-shadow:0 0 6px ${color};"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+}
 
-const visitedAirports = new Set();
+const PAST_COLOR = "#38bdf8";
+const UPCOMING_COLOR = "#fbbf24";
+
+const pastAirports = new Set();
+const allAirports = new Set();
 const allLatLngs = [];
-let totalMiles = 0;
-let totalSegments = 0;
-// edgeKey ("AAA|BBB" sorted) -> count of times flown across all trips
-const edgeCounts = new Map();
+let flownMiles = 0;
+let flownSegments = 0;
+let pastTripCount = 0;
+let upcomingTripCount = 0;
 
 const tripList = document.getElementById("trip-list");
 
@@ -65,8 +71,10 @@ function edgeKey(a, b) {
 }
 
 TRIPS.forEach((trip) => {
-  let tripMiles = 0;
-  let tripSegments = 0;
+  const count = trip.count || 1;
+  const upcoming = !!trip.upcoming;
+  let legMiles = 0;
+  let legSegments = 0;
   const drawnEdgesThisTrip = new Set();
 
   trip.legs.forEach((leg) => {
@@ -81,55 +89,71 @@ TRIPS.forEach((trip) => {
       }
 
       const miles = haversineMiles(from, to);
-      tripMiles += miles;
-      tripSegments += 1;
-      totalMiles += miles;
-      totalSegments += 1;
-      visitedAirports.add(fromCode);
-      visitedAirports.add(toCode);
+      legMiles += miles;
+      legSegments += 1;
+      allAirports.add(fromCode);
+      allAirports.add(toCode);
+      if (!upcoming) {
+        pastAirports.add(fromCode);
+        pastAirports.add(toCode);
+      }
 
       const key = edgeKey(fromCode, toCode);
-      edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
-
-      // Draw each unique edge once per trip so overlapping legs of the same
-      // trip (e.g. outbound + return through same hub) don't pile up identical lines.
       if (!drawnEdgesThisTrip.has(key)) {
         drawnEdgesThisTrip.add(key);
         const path = greatCirclePoints(from, to);
-        L.polyline(path, {
-          color: "#38bdf8",
+        const polyOpts = {
+          color: upcoming ? UPCOMING_COLOR : PAST_COLOR,
           weight: 2,
-          opacity: 0.7,
-        }).addTo(map).bindTooltip(
-          `${fromCode} &harr; ${toCode}<br>${Math.round(miles).toLocaleString()} mi`
+          opacity: upcoming ? 0.9 : 0.7,
+        };
+        if (upcoming) polyOpts.dashArray = "6 6";
+        L.polyline(path, polyOpts).addTo(map).bindTooltip(
+          `${fromCode} &harr; ${toCode}<br>${Math.round(miles).toLocaleString()} mi${upcoming ? " · upcoming" : ""}`
         );
         allLatLngs.push(...path);
       }
     }
   });
 
+  const totalSegs = legSegments * count;
+  const totalMi = legMiles * count;
+
+  if (upcoming) {
+    upcomingTripCount += count;
+  } else {
+    flownMiles += totalMi;
+    flownSegments += totalSegs;
+    pastTripCount += count;
+  }
+
   const routeText = trip.legs.map((leg) => leg.join(" → ")).join("   …   ");
   const li = document.createElement("li");
+  const countBadge = count > 1 ? ` <span class="badge">×${count}</span>` : "";
+  const upcomingBadge = upcoming ? ` <span class="badge upcoming">upcoming</span>` : "";
   li.innerHTML = `
-    <div class="route">${trip.label}</div>
+    <div class="route">${trip.label}${countBadge}${upcomingBadge}</div>
     <div class="path">${routeText}</div>
-    <div class="meta">${tripSegments} segment${tripSegments === 1 ? "" : "s"} · ${Math.round(tripMiles).toLocaleString()} mi</div>
+    <div class="meta">${totalSegs} segment${totalSegs === 1 ? "" : "s"} · ${Math.round(totalMi).toLocaleString()} mi</div>
   `;
+  if (upcoming) li.classList.add("upcoming");
   tripList.appendChild(li);
 });
 
-visitedAirports.forEach((code) => {
+allAirports.forEach((code) => {
   const a = AIRPORTS[code];
-  L.marker([a.lat, a.lon], { icon: airportIcon })
+  const isPast = pastAirports.has(code);
+  L.marker([a.lat, a.lon], { icon: airportMarkerIcon(isPast ? PAST_COLOR : UPCOMING_COLOR) })
     .addTo(map)
-    .bindPopup(`<strong>${code}</strong><br>${a.name}<br>${a.city}`);
+    .bindPopup(`<strong>${code}</strong><br>${a.name}<br>${a.city}${isPast ? "" : "<br><em>upcoming</em>"}`);
 });
 
 if (allLatLngs.length > 0) {
   map.fitBounds(L.latLngBounds(allLatLngs).pad(0.15));
 }
 
-document.getElementById("stat-flights").textContent = totalSegments;
-document.getElementById("stat-trips").textContent = TRIPS.length;
-document.getElementById("stat-airports").textContent = visitedAirports.size;
-document.getElementById("stat-miles").textContent = Math.round(totalMiles).toLocaleString();
+document.getElementById("stat-flights").textContent = flownSegments;
+document.getElementById("stat-trips").textContent = pastTripCount;
+document.getElementById("stat-airports").textContent = pastAirports.size;
+document.getElementById("stat-miles").textContent = Math.round(flownMiles).toLocaleString();
+document.getElementById("stat-upcoming").textContent = upcomingTripCount;

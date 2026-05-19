@@ -42,6 +42,23 @@ main { flex: 1; display: flex; min-height: 0; }
 #trip-list .route { font-weight: 600; color: #f1f5f9; }
 #trip-list .path { font-size: 0.8rem; color: #cbd5e1; margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 #trip-list .meta { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; }
+#trip-list li.upcoming { border-color: #78350f; background: #1a1408; }
+#trip-list li.upcoming .route { color: #fbbf24; }
+.badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  margin-left: 4px;
+  background: #38bdf8;
+  color: #0f172a;
+  border-radius: 4px;
+  font-weight: 700;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge.upcoming { background: #fbbf24; }
+.stat.upcoming-stat span { color: #fbbf24; }
 
 .leaflet-tooltip { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #1e293b; color: #e2e8f0; }
