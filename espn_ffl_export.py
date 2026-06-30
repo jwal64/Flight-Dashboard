@@ -249,49 +249,44 @@ def write_csv(path, rows):
     return len(rows)
 
 
-# ------------------------------------------------------------------ main ----
-def main():
-    ap = argparse.ArgumentParser(
-        description="Export ESPN fantasy football data (public-league method, no cookies).")
-    ap.add_argument("--league", type=int, default=DEFAULT_LEAGUE_ID)
-    ap.add_argument("--years", type=int, nargs="+", default=DEFAULT_YEARS)
-    ap.add_argument("--out", default="espn_export")
-    ap.add_argument("--sleep", type=float, default=1.0,
-                    help="seconds to wait between seasons (be polite to ESPN)")
-    args = ap.parse_args()
+CATEGORIES = ["standings", "matchups", "draft", "transactions", "rosters"]
 
-    raw_dir = os.path.join(args.out, "raw")
+
+# --------------------------------------------------------------- exporter ---
+def run_export(league_id, years, out_dir, sleep=1.0, log=print):
+    """Export the requested seasons into out_dir. Reusable by the CLI and the
+    web app. Returns a summary dict: {ok, failed, totals, out_dir}."""
+    raw_dir = os.path.join(out_dir, "raw")
     os.makedirs(raw_dir, exist_ok=True)
 
     # one folder per category; each gets its own file per season
-    categories = ["standings", "matchups", "draft", "transactions", "rosters"]
-    cat_dir = {c: os.path.join(args.out, c) for c in categories}
+    cat_dir = {c: os.path.join(out_dir, c) for c in CATEGORIES}
     for d in cat_dir.values():
         os.makedirs(d, exist_ok=True)
 
-    totals = {c: 0 for c in categories}
+    totals = {c: 0 for c in CATEGORIES}
     ok, failed = [], []
 
-    for year in args.years:
-        print(f"[{year}] league {args.league} ...", flush=True)
+    for year in years:
+        log(f"[{year}] league {league_id} ...")
         try:
-            league, source = get_season(args.league, year)
+            league, source = get_season(league_id, year)
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
-                print(f"  -> {year}: ACCESS DENIED ({e.code}). This season is a PRIVATE "
-                      f"league. Set ESPN_S2 + ESPN_SWID env vars to include it.")
+                log(f"  -> {year}: ACCESS DENIED ({e.code}). This season is a PRIVATE "
+                    f"league. Set ESPN_S2 + ESPN_SWID env vars to include it.")
             elif e.code == 404:
-                print(f"  -> {year}: NOT FOUND (404). No league for this season.")
+                log(f"  -> {year}: NOT FOUND (404). No league for this season.")
             else:
-                print(f"  -> {year}: HTTP {e.code} {e.reason}")
+                log(f"  -> {year}: HTTP {e.code} {e.reason}")
             failed.append(year)
             continue
         except urllib.error.URLError as e:
-            print(f"  -> {year}: network error: {e.reason}")
+            log(f"  -> {year}: network error: {e.reason}")
             failed.append(year)
             continue
         except Exception as e:                       # noqa: BLE001
-            print(f"  -> {year}: error: {e}")
+            log(f"  -> {year}: error: {e}")
             failed.append(year)
             continue
 
@@ -314,17 +309,35 @@ def main():
             totals[c] += counts[c]
 
         lname = (league.get("settings") or {}).get("name", "")
-        print(f"  -> {year}: OK via {source}  '{lname}'  teams={counts['standings']} "
-              f"matchups={counts['matchups']} picks={counts['draft']} "
-              f"txns={counts['transactions']} players_named={len(pmap)}")
+        log(f"  -> {year}: OK via {source}  '{lname}'  teams={counts['standings']} "
+            f"matchups={counts['matchups']} picks={counts['draft']} "
+            f"txns={counts['transactions']} players_named={len(pmap)}")
         ok.append(year)
-        time.sleep(args.sleep)
+        time.sleep(sleep)
+
+    return {"ok": ok, "failed": failed, "totals": totals, "out_dir": out_dir}
+
+
+# ------------------------------------------------------------------ main ----
+def main():
+    ap = argparse.ArgumentParser(
+        description="Export ESPN fantasy football data (public-league method, no cookies).")
+    ap.add_argument("--league", type=int, default=DEFAULT_LEAGUE_ID)
+    ap.add_argument("--years", type=int, nargs="+", default=DEFAULT_YEARS)
+    ap.add_argument("--out", default="espn_export")
+    ap.add_argument("--sleep", type=float, default=1.0,
+                    help="seconds to wait between seasons (be polite to ESPN)")
+    args = ap.parse_args()
+
+    summary = run_export(args.league, args.years, args.out, sleep=args.sleep)
+    ok, failed, totals = summary["ok"], summary["failed"], summary["totals"]
+    cat_dir = {c: os.path.join(args.out, c) for c in CATEGORIES}
 
     print("\n==== SUMMARY ====")
     print(f"Seasons OK:     {ok}")
     print(f"Seasons failed: {failed}")
-    print(f"Raw JSON:  {raw_dir}/<year>.json")
-    for c in categories:
+    print(f"Raw JSON:  {os.path.join(args.out, 'raw')}/<year>.json")
+    for c in CATEGORIES:
         print(f"{c+':':14}{cat_dir[c]}/{c}_<year>.csv   (rows total: {totals[c]})")
     if failed:
         print("\nFailed seasons are almost always a private league (needs the optional "
